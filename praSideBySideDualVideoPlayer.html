@@ -1,0 +1,924 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Video Profile Comparator</title>
+    <!-- Include Video.js CSS -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/video.js/7.20.1/video-js.min.css" rel="stylesheet" />
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+
+        h1 {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        .comparison-container {
+            margin-bottom: 20px;
+        }
+
+        .video-comparison {
+            position: relative;
+            width: 100%;
+            height: 0;
+            padding-bottom: 56.25%;
+            /* 16:9 aspect ratio */
+            background-color: #000;
+            overflow: hidden;
+            border-radius: 4px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        /* First video - fully visible */
+        .left-video-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+        }
+
+        /* Override Video.js dimensions */
+        .left-video-container .video-js {
+            width: 100% !important;
+            height: 100% !important;
+        }
+
+        /* Second video with mask */
+        .right-video-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            /* This container will only be visible on the right side of the divider */
+            clip-path: polygon(50% 0, 100% 0, 100% 100%, 50% 100%);
+        }
+
+        /* Override Video.js dimensions */
+        .right-video-container .video-js {
+            width: 100% !important;
+            height: 100% !important;
+        }
+
+        /* Hide Video.js controls since we're using our own */
+        .video-js .vjs-control-bar {
+            display: none;
+        }
+
+        .divider {
+            position: absolute;
+            top: 0;
+            left: 50%;
+            /* Initial position in the middle */
+            width: 4px;
+            height: 100%;
+            background-color: rgba(255, 255, 255, 0.8);
+            cursor: col-resize;
+            z-index: 10;
+        }
+
+        .divider::after {
+            content: "";
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 40px;
+            height: 40px;
+            background-color: rgba(255, 255, 255, 0.8);
+            border-radius: 50%;
+        }
+
+        .divider::before {
+            content: "⟷";
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 20px;
+            color: #333;
+            z-index: 11;
+        }
+
+        .controls-panel {
+            background-color: #fff;
+            padding: 15px;
+            border-radius: 4px;
+            margin-top: 20px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .control-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 15px;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .player-control {
+            flex: 1;
+            min-width: 300px;
+        }
+
+        .player-title {
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        select,
+        input {
+            width: 100%;
+            padding: 8px;
+            border-radius: 4px;
+            border: 1px solid #ccc;
+            margin-top: 5px;
+        }
+
+        .load-btn {
+            padding: 6px 12px;
+            background-color: #4285f4;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-top: 5px;
+        }
+
+        .load-btn:hover {
+            background-color: #3367d6;
+        }
+
+        .common-controls {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            margin-top: 15px;
+        }
+
+        .control-btn {
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            background-color: #333;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            min-width: 100px;
+        }
+
+        .control-btn:hover {
+            background-color: #555;
+        }
+
+        .fullscreen-btn {
+            background-color: #009688;
+        }
+
+        .fullscreen-btn:hover {
+            background-color: #00796b;
+        }
+
+        .audio-control {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            margin-top: 10px;
+        }
+
+        .player-info {
+            margin-top: 5px;
+            font-size: 14px;
+            color: #666;
+        }
+
+        /* Format selection */
+        .format-selection {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-top: 5px;
+        }
+
+        .format-selection label {
+            display: inline-block;
+            padding: 4px 8px;
+            background-color: #eee;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        .format-selection input[type="radio"]:checked+label {
+            background-color: #4285f4;
+            color: white;
+        }
+
+        .format-selection input[type="radio"] {
+            position: absolute;
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        /* Styles for fullscreen mode */
+        .video-comparison.fullscreen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            padding-bottom: 0;
+            z-index: 9999;
+            border-radius: 0;
+        }
+
+        /* Overlay for information in fullscreen mode */
+        .fullscreen-info {
+            position: absolute;
+            bottom: 20px;
+            left: 0;
+            width: 100%;
+            display: flex;
+            justify-content: space-around;
+            color: white;
+            background-color: rgba(0, 0, 0, 0.5);
+            padding: 10px;
+            font-size: 14px;
+            z-index: 10;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+
+        .video-comparison:hover .fullscreen-info {
+            opacity: 1;
+        }
+
+        .exit-fullscreen {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background-color: rgba(0, 0, 0, 0.5);
+            color: white;
+            border: none;
+            padding: 10px;
+            cursor: pointer;
+            border-radius: 4px;
+            z-index: 10;
+            display: none;
+        }
+
+        .fullscreen .exit-fullscreen {
+            display: block;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Video Profile Comparator</br>with video.js</h1>
+    <p style="text-align: center; margin-bottom: 15px;">Compare HLS, DASH, and MP4 videos side by side</p>
+
+    <div class="comparison-container">
+        <div class="video-comparison">
+            <!-- First video (visible by default) -->
+            <div class="left-video-container" id="left-video-container">
+                <video id="video-1" class="video-js vjs-default-skin" controls preload="auto" muted></video>
+            </div>
+
+            <!-- Second video (visible only to the right of the divider) -->
+            <div class="right-video-container" id="right-video-container">
+                <video id="video-2" class="video-js vjs-default-skin" controls preload="auto" muted></video>
+            </div>
+
+            <!-- Divider -->
+            <div class="divider" id="divider"></div>
+
+            <button class="exit-fullscreen">✕ Exit fullscreen</button>
+            <div class="fullscreen-info">
+                <div id="left-info">Left: <span id="info-quality-1">-</span></div>
+                <div id="right-info">Right: <span id="info-quality-2">-</span></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="controls-panel">
+        <div class="control-row">
+            <div class="player-control">
+                <div class="player-title">Left Video</div>
+                <div class="format-selection">
+                    <input type="radio" id="hls-1" name="format-1" value="hls">
+                    <label for="hls-1">HLS</label>
+                    <input type="radio" id="dash-1" name="format-1" value="dash" checked>
+                    <label for="dash-1">DASH</label>
+                    <input type="radio" id="mp4-1" name="format-1" value="mp4">
+                    <label for="mp4-1">MP4</label>
+                </div>
+                <input type="text" id="video-url-1" placeholder="Video URL (HLS/DASH playlist or MP4 file)"
+                    value="https://dash.akamaized.net/akamai/bbb_30fps/bbb_30fps.mpd">
+                <button class="load-btn" id="load-btn-1">Load</button>
+                <button class="load-btn" id="copy-btn-1">Copy left to right</button>
+                <div>
+                    <label for="quality-select-1">Quality:</label>
+                    <select id="quality-select-1" disabled>
+                        <option value="auto">Auto (adaptive)</option>
+                    </select>
+                </div>
+                <div class="audio-control">
+                    <input type="checkbox" id="mute-1" checked>
+                    <label for="mute-1">Mute</label>
+                </div>
+                <div class="player-info">
+                    <strong>Current quality:</strong> <span id="current-quality-1">-</span>
+                </div>
+                <div class="player-info">
+                    <strong>Format:</strong> <span id="current-format-1">HLS</span>
+                </div>
+            </div>
+
+            <div class="player-control">
+                <div class="player-title">Right Video</div>
+                <div class="format-selection">
+                    <input type="radio" id="hls-2" name="format-2" value="hls">
+                    <label for="hls-2">HLS</label>
+                    <input type="radio" id="dash-2" name="format-2" value="dash" checked>
+                    <label for="dash-2">DASH</label>
+                    <input type="radio" id="mp4-2" name="format-2" value="mp4">
+                    <label for="mp4-2">MP4</label>
+                </div>
+                <input type="text" id="video-url-2" placeholder="Video URL (HLS/DASH playlist or MP4 file)"
+                    value="https://dash.akamaized.net/akamai/bbb_30fps/bbb_30fps.mpd">
+                <button class="load-btn" id="load-btn-2">Load</button>
+                <button class="load-btn" id="copy-btn-2">Copy right to left</button>
+                <div>
+                    <label for="quality-select-2">Quality:</label>
+                    <select id="quality-select-2" disabled>
+                        <option value="auto">Auto (adaptive)</option>
+                    </select>
+                </div>
+                <div class="audio-control">
+                    <input type="checkbox" id="mute-2" checked>
+                    <label for="mute-2">Mute</label>
+                </div>
+                <div class="player-info">
+                    <strong>Current quality:</strong> <span id="current-quality-2">-</span>
+                </div>
+                <div class="player-info">
+                    <strong>Format:</strong> <span id="current-format-2">HLS</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="common-controls">
+            <button class="control-btn" id="play-btn">Play</button>
+            <button class="control-btn" id="pause-btn">Pause</button>
+            <button class="control-btn" id="stop-btn">Stop</button>
+            <button class="control-btn fullscreen-btn" id="fullscreen-btn">Fullscreen</button>
+            <div class="audio-control">
+                <input type="checkbox" id="synchro" checked>
+                <label for="synchro">Synchro</label>
+            </div>
+        </div>
+    </div>
+
+    <!-- Load Video.js and HTTP Streaming plugin from CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/video.js/7.20.1/video.min.js"></script>
+    <script
+        src="https://cdnjs.cloudflare.com/ajax/libs/videojs-contrib-quality-levels/2.1.0/videojs-contrib-quality-levels.min.js"></script>
+    <script
+        src="https://cdnjs.cloudflare.com/ajax/libs/videojs-http-streaming/2.14.2/videojs-http-streaming.min.js"></script>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            // First player elements
+            const videoEl1 = document.getElementById('video-1');
+            const qualitySelect1 = document.getElementById('quality-select-1');
+            const videoUrlInput1 = document.getElementById('video-url-1');
+            const loadBtn1 = document.getElementById('load-btn-1');
+            const copyBtn1 = document.getElementById('copy-btn-1');
+            const currentQualityElement1 = document.getElementById('current-quality-1');
+            const currentFormatElement1 = document.getElementById('current-format-1');
+            const infoQuality1 = document.getElementById('info-quality-1');
+            const muteCheckbox1 = document.getElementById('mute-1');
+            const formatRadios1 = document.querySelectorAll('input[name="format-1"]');
+
+            // Second player elements
+            const videoEl2 = document.getElementById('video-2');
+            const qualitySelect2 = document.getElementById('quality-select-2');
+            const videoUrlInput2 = document.getElementById('video-url-2');
+            const loadBtn2 = document.getElementById('load-btn-2');
+            const copyBtn2 = document.getElementById('copy-btn-2');
+            const currentQualityElement2 = document.getElementById('current-quality-2');
+            const currentFormatElement2 = document.getElementById('current-format-2');
+            const infoQuality2 = document.getElementById('info-quality-2');
+            const muteCheckbox2 = document.getElementById('mute-2');
+            const formatRadios2 = document.querySelectorAll('input[name="format-2"]');
+
+            // Common control buttons
+            const playBtn = document.getElementById('play-btn');
+            const pauseBtn = document.getElementById('pause-btn');
+            const stopBtn = document.getElementById('stop-btn');
+            const fullscreenBtn = document.getElementById('fullscreen-btn');
+            const exitFullscreenBtn = document.querySelector('.exit-fullscreen');
+            const synchroCheckbox = document.getElementById('synchro');
+
+            // Comparison elements
+            const videoComparison = document.querySelector('.video-comparison');
+            const divider = document.getElementById('divider');
+            const rightVideoContainer = document.getElementById('right-video-container');
+            const leftVideoContainer = document.getElementById('left-video-container');
+
+            let player1 = null;
+            let player2 = null;
+            // Initialize players with default URLs
+            player1 = initPlayer(leftVideoContainer, videoEl1, player1, videoUrlInput1.value, qualitySelect1, currentQualityElement1, infoQuality1, formatRadios1, currentFormatElement1, muteCheckbox1);
+            player2 = initPlayer(rightVideoContainer, videoEl2, player2, videoUrlInput2.value, qualitySelect2, currentQualityElement2, infoQuality2, formatRadios2, currentFormatElement2, muteCheckbox2);
+
+            // Set up time sync monitoring
+            const syncInterval = setInterval(syncVideos, 1000);
+
+
+            // Helper function to determine MIME type based on URL and format selection
+            function getMimeType(url, formatRadios) {
+                // Déterminer l'extension à partir de l'URL
+                const extension = url.split('.').pop().toLowerCase();
+                let mimeType;
+
+                if (['m3u8', 'm3u'].includes(extension)) {
+                    mimeType = 'application/x-mpegURL';
+                    formatRadios.forEach(radio => {
+                        if (radio.value === 'hls') {
+                            radio.checked = true; // Cocher le bouton "HLS"
+                        }
+                    });
+                } else if (['mpd'].includes(extension)) {
+                    mimeType = 'application/dash+xml';
+                    formatRadios.forEach(radio => {
+                        if (radio.value === 'dash') {
+                            radio.checked = true; // Cocher le bouton "DASH"
+                        }
+                    });
+                } else if (['mp4', 'webm', 'ogg'].includes(extension)) {
+                    mimeType = `video/${extension}`;
+                    formatRadios.forEach(radio => {
+                        if (radio.value === 'mp4') {
+                            radio.checked = true; // Cocher le bouton "MP4"
+                        }
+                    });
+                } else {
+                    // Valeur par défaut si le type est inconnu
+                    mimeType = 'application/x-mpegURL';
+                    formatRadios.forEach(radio => {
+                        if (radio.value === 'hls') {
+                            radio.checked = true; // Cocher le bouton "HLS" par défaut
+                        }
+                    });
+                }
+
+                return mimeType;
+            }
+
+
+
+
+            // Helper function to determine MIME type based on URL and format selection
+
+            // function getMimeType(url, formatValue) {
+            //     // First check the format selection
+            //     if (formatValue === 'hls') {
+            //         return 'application/x-mpegURL';
+            //     } else if (formatValue === 'dash') {
+            //         return 'application/dash+xml';
+            //     } else if (formatValue === 'mp4') {
+            //         return 'video/mp4';
+            //     }
+
+            //     // Fallback: try to determine from URL extension
+            //     const extension = url.split('.').pop().toLowerCase();
+
+            //     if (['m3u8', 'm3u'].includes(extension)) {
+            //         return 'application/x-mpegURL';
+            //     } else if (['mpd'].includes(extension)) {
+            //         return 'application/dash+xml';
+            //     } else if (['mp4', 'webm', 'ogg'].includes(extension)) {
+            //         return `video/${extension}`;
+            //     }
+
+            //     // Default to HLS if we can't determine
+            //     return 'application/x-mpegURL';
+            // }
+
+            // Helper function to get the selected format value
+            function getSelectedFormat(radioGroup) {
+                for (const radio of radioGroup) {
+                    if (radio.checked) {
+                        return radio.value;
+                    }
+                }
+                return 'hls'; // Default to HLS
+            }
+
+            // Initialize videojs players with basic options
+            function initPlayer(whichContainer, videoElement, currentPlayer, url, qualitySelect, currentQualityElement, infoQuality, formatRadios, currentFormatElement, muteCheckbox) {
+
+                // Destroy previous player if it exists
+                if (currentPlayer && typeof currentPlayer.dispose === 'function') {
+                    currentPlayer.dispose();
+
+                    //Video.js detroys all dom elements relative to the player
+                    //there must be re created
+                    videoElement = document.createElement('video');
+                    videoElement.className = 'video-js vjs-default-skin';
+                    videoElement.setAttribute('controls', 'controls');
+                    videoElement.setAttribute('muted', 'muted');
+                    whichContainer.appendChild(videoElement);
+                }
+
+                // Reset the quality list
+                qualitySelect.innerHTML = '<option value="auto">Auto (adaptive)</option>';
+                qualitySelect.disabled = true;
+                currentQualityElement.textContent = "-";
+                infoQuality.textContent = "-";
+
+                // Get the selected format
+                // const selectedFormat = getSelectedFormat(formatRadios);
+                // currentFormatElement.textContent = selectedFormat.toUpperCase();
+
+                // Determine the MIME type
+                const mimeType = getMimeType(url, formatRadios);
+
+                // Create a new videojs player
+                const player = videojs(videoElement, {
+                    controls: false,
+                    autoplay: false,
+                    preload: 'auto',
+                    fluid: true,
+                    muted: true,
+                    html5: {
+                        vhs: {
+                            overrideNative: true
+                        },
+                        nativeAudioTracks: false,
+                        nativeVideoTracks: false
+                    }
+                });
+
+                // Load the source
+                player.src({
+                    src: url,
+                    type: mimeType
+                });
+
+                muteCheckbox.checked = true;
+
+                // For MP4 videos, we won't have quality levels
+                if (mimeType === 'video/mp4') {
+                    qualitySelect.disabled = true;
+                    currentQualityElement.textContent = "Fixed quality (MP4)";
+                    infoQuality.textContent = "Fixed quality (MP4)";
+                } else {
+                    // For HLS and DASH
+                    player.ready(function () {
+                        // When the media is loaded
+                        this.on('loadedmetadata', function () {
+                            // Use quality levels plugin
+                            if (player.qualityLevels) {
+                                const qualityLevels = player.qualityLevels();
+
+                                // Clear existing options except Auto
+                                while (qualitySelect.options.length > 1) {
+                                    qualitySelect.remove(1);
+                                }
+
+                                if (qualityLevels.length > 0) {
+                                    // Enable the quality selector
+                                    qualitySelect.disabled = false;
+
+                                    // Add each quality level as an option
+                                    for (let i = 0; i < qualityLevels.length; i++) {
+                                        const level = qualityLevels[i];
+                                        const option = document.createElement('option');
+                                        option.value = i;
+
+                                        // Get the height and bitrate
+                                        const height = level.height || 'unknown';
+                                        const bandwidth = level.bandwidth
+                                            ? Math.round(level.bandwidth / 1000)
+                                            : 'unknown';
+                                        option.textContent = `${height}p (${bandwidth} kbps)`;
+                                        qualitySelect.appendChild(option);
+                                    }
+
+                                    // Set up the quality change event handler
+                                    qualitySelect.addEventListener('change', function () {
+                                        const selectedValue = this.value;
+
+                                        if (selectedValue === 'auto') {
+                                            // Enable auto quality selection
+                                            for (let i = 0; i < qualityLevels.length; i++) {
+                                                qualityLevels[i].enabled = true;
+                                            }
+                                            currentQualityElement.textContent = "Auto";
+                                            infoQuality.textContent = "Auto";
+                                        } else {
+                                            // Set specific quality
+                                            const selectedIndex = parseInt(selectedValue);
+                                            for (let i = 0; i < qualityLevels.length; i++) {
+                                                qualityLevels[i].enabled = (i === selectedIndex);
+                                            }
+
+                                            // Update the quality info
+                                            const selectedLevel = qualityLevels[selectedIndex];
+                                            const height = selectedLevel.height || 'unknown';
+                                            const bandwidth = selectedLevel.bandwidth
+                                                ? Math.round(selectedLevel.bandwidth / 1000)
+                                                : 'unknown';
+                                            const qualityInfo = `${height}p (${bandwidth} kbps)`;
+                                            currentQualityElement.textContent = qualityInfo;
+                                            infoQuality.textContent = qualityInfo;
+                                        }
+                                    });
+
+                                    // Monitor auto quality selection
+                                    player.on('timeupdate', function () {
+                                        if (qualitySelect.value === 'auto') {
+                                            // Find currently active level
+                                            let activeLevel = null;
+                                            for (let i = 0; i < qualityLevels.length; i++) {
+                                                if (qualityLevels[i].enabled && qualityLevels[i].active) {
+                                                    activeLevel = qualityLevels[i];
+                                                    break;
+                                                }
+                                            }
+
+                                            if (activeLevel) {
+                                                const height = activeLevel.height || 'unknown';
+                                                const bandwidth = activeLevel.bandwidth
+                                                    ? Math.round(activeLevel.bandwidth / 1000)
+                                                    : 'unknown';
+                                                const qualityInfo = `${height}p (${bandwidth} kbps)`;
+                                                currentQualityElement.textContent = qualityInfo + " (Auto)";
+                                                infoQuality.textContent = qualityInfo + " (Auto)";
+                                            } else {
+                                                currentQualityElement.textContent = "Auto";
+                                                infoQuality.textContent = "Auto";
+                                            }
+                                        }
+                                    });
+                                }
+                            }
+                        });
+                    });
+                }
+
+                // Handle errors
+                player.on('error', function (e) {
+                    console.error('Video.js Error:', player.error());
+                    currentQualityElement.textContent = "Error loading video";
+                    infoQuality.textContent = "Error";
+                });
+
+                return player;
+            }
+
+            // Function to synchronize videos
+            function syncVideos() {
+                if (player1 && player2) {
+                    const time1 = player1.currentTime();
+                    const time2 = player2.currentTime();
+                    const timeDiff = Math.abs(time1 - time2);
+
+                    if (timeDiff > 0.3) { // If the difference is greater than 0.3 seconds
+                        player2.currentTime(time1);
+                    }
+                }
+            }
+
+            // Function to enable fullscreen mode
+            function toggleFullscreen() {
+                if (!videoComparison.classList.contains('fullscreen')) {
+                    if (videoComparison.requestFullscreen) {
+                        videoComparison.requestFullscreen();
+                    } else if (videoComparison.webkitRequestFullscreen) {
+                        videoComparison.webkitRequestFullscreen();
+                    } else if (videoComparison.msRequestFullscreen) {
+                        videoComparison.msRequestFullscreen();
+                    }
+                    videoComparison.classList.add('fullscreen');
+                } else {
+                    if (document.exitFullscreen) {
+                        document.exitFullscreen();
+                    } else if (document.webkitExitFullscreen) {
+                        document.webkitExitFullscreen();
+                    } else if (document.msExitFullscreen) {
+                        document.msExitFullscreen();
+                    }
+                    videoComparison.classList.remove('fullscreen');
+                }
+            }
+
+
+
+            // Set up format radio change handlers
+            for (const radio of formatRadios1) {
+                radio.addEventListener('change', function () {
+                    currentFormatElement1.textContent = this.value.toUpperCase();
+                });
+            }
+
+            for (const radio of formatRadios2) {
+                radio.addEventListener('change', function () {
+                    currentFormatElement2.textContent = this.value.toUpperCase();
+                });
+            }
+
+            // Handle mute controls
+            muteCheckbox1.addEventListener('change', function () {
+                if (player1) {
+                    player1.muted(this.checked);
+                }
+            });
+
+            muteCheckbox2.addEventListener('change', function () {
+                if (player2) {
+                    player2.muted(this.checked);
+                }
+            });
+
+            // Load new videos for the players
+            loadBtn1.addEventListener('click', function () {
+                const url = videoUrlInput1.value.trim();
+                if (url) {
+                    player1 = initPlayer(leftVideoContainer, videoEl1, player1, url, qualitySelect1, currentQualityElement1, infoQuality1, formatRadios1, currentFormatElement1, muteCheckbox1);
+                }
+            });
+
+            loadBtn2.addEventListener('click', function () {
+                const url = videoUrlInput2.value.trim();
+                if (url) {
+                    player2 = initPlayer(rightVideoContainer, videoEl2, player2, url, qualitySelect2, currentQualityElement2, infoQuality2, formatRadios2, currentFormatElement2, muteCheckbox2);
+                }
+            });
+
+            // copy url on the other side
+            copyBtn1.addEventListener('click', function () {
+                //const url = videoUrlInput1.value.trim();
+                videoUrlInput2.value = videoUrlInput1.value.trim();
+            });
+
+            copyBtn2.addEventListener('click', function () {
+                //const url = videoUrlInput2.value.trim();
+                videoUrlInput1.value = videoUrlInput2.value.trim();
+            });
+
+            // Handle common controls
+            playBtn.addEventListener('click', function () {
+                if (player1) player1.play();
+                if (player2) player2.play();
+            });
+
+            pauseBtn.addEventListener('click', function () {
+                if (player1) player1.pause();
+                if (player2) player2.pause();
+            });
+
+            stopBtn.addEventListener('click', function () {
+                if (player1) {
+                    player1.pause();
+                    player1.currentTime(0);
+                }
+                if (player2) {
+                    player2.pause();
+                    player2.currentTime(0);
+                }
+            });
+
+            fullscreenBtn.addEventListener('click', toggleFullscreen);
+            exitFullscreenBtn.addEventListener('click', toggleFullscreen);
+
+            document.addEventListener('fullscreenchange', function () {
+                if (!document.fullscreenElement) {
+                    videoComparison.classList.remove('fullscreen');
+                }
+            });
+
+            // Handle divider movement
+            let isDragging = false;
+
+            divider.addEventListener('mousedown', function (e) {
+                isDragging = true;
+                e.preventDefault();
+            });
+
+            document.addEventListener('mousemove', function (e) {
+                if (!isDragging) return;
+
+                const containerRect = videoComparison.getBoundingClientRect();
+                const containerLeft = containerRect.left;
+                const containerWidth = containerRect.width;
+
+                // Calculate the relative position of the mouse in the container
+                const relativeX = e.clientX - containerLeft;
+                const percentX = (relativeX / containerWidth) * 100;
+
+                // Limit the percentage between 5% and 95%
+                const limitedPercentX = Math.min(Math.max(percentX, 5), 95);
+
+                // Update the divider position
+                divider.style.left = limitedPercentX + '%';
+
+                // Update the mask of the right video
+                rightVideoContainer.style.clipPath = `polygon(${limitedPercentX}% 0, 100% 0, 100% 100%, ${limitedPercentX}% 100%)`;
+            });
+
+            document.addEventListener('mouseup', function () {
+                isDragging = false;
+            });
+
+            // Exit "isDragging" mode if the mouse leaves the window
+            document.addEventListener('mouseleave', function () {
+                isDragging = false;
+            });
+
+            // Clean up on page unload
+            window.addEventListener('beforeunload', function () {
+                clearInterval(syncInterval);
+                if (player1) player1.dispose();
+                if (player2) player2.dispose();
+            });
+            //key donw management 
+            window.onkeydown = function (e) {
+                switch (e.keyCode) {
+                    case 32: // 32 is the keyCode for the spacebar
+                        if (player1.paused()) {
+                            player1.play();
+                            player2.play();
+                        } else {
+                            player1.pause();
+                            player2.pause();
+                        }
+                        e.preventDefault(); // prevent the default action (scroll / move caret)
+                        break;
+
+                    case 82: // 82 is the keyCode for 'R'
+                        // console.log("Touche R, code 82 ");
+                        // if (leftVideo.paused) {
+                        //     videoSync();
+                        // } else {
+                        //     pauseVideo();
+                        //     videoSync();
+                        //     playVideo();
+                        // }
+                        e.preventDefault(); // prevent the default action (scroll / move caret)
+                        break;
+
+                    case 37: // 37 is the keyCode for the left arrow
+                        // if (leftVideo.paused) {
+                        //     // leftVideo.currentTime = leftVideo.currentTime - 0.040;
+                        //     // videoSync();
+                        // } else {
+                        //     pauseVideo();
+                        //     leftVideo.currentTime = leftVideo.currentTime - 0.040;
+                        //     videoSync();
+                        //     playVideo();
+                        // }
+
+                        e.preventDefault(); // prevent the default action (scroll / move caret)
+                        break;
+
+                    case 39: // 39 is the keyCode for the right arrow
+                        // if (leftVideo.paused) {
+                        //     leftVideo.currentTime = leftVideo.currentTime + 0.040;
+                        //     videoSync();
+                        // } else {
+                        //     pauseVideo();
+                        //     leftVideo.currentTime = leftVideo.currentTime + 0.040;
+                        //     videoSync();
+                        //     playVideo();
+                        // }
+
+                        e.preventDefault(); // prevent the default action (scroll / move caret)
+                        break;
+                }
+            };
+
+
+        });
+
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,1013 @@
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dynamic HLS Player</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/hls.js/1.4.12/hls.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            text-align: center;
+            color: white;
+            margin-bottom: 30px;
+            font-size: 2.5em;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+        }
+
+        .player-count-controls {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .player-count-controls button {
+            padding: 12px 24px;
+            margin: 0 10px;
+            border: none;
+            border-radius: 8px;
+            font-size: 1em;
+            font-weight: 600;
+            cursor: pointer;
+            background: white;
+            color: #667eea;
+            transition: all 0.3s;
+        }
+
+        .player-count-controls button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+        }
+
+        .player-count-controls button.active {
+            background: #667eea;
+            color: white;
+        }
+
+        .players-container {
+            display: grid;
+            gap: 30px;
+            margin-bottom: 20px;
+        }
+
+        .players-container.count-1 {
+            grid-template-columns: 1fr;
+            max-width: 900px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        .players-container.count-2 {
+            grid-template-columns: 1fr 1fr;
+        }
+
+        .players-container.count-3 {
+            grid-template-columns: repeat(3, 1fr);
+        }
+
+        .player-wrapper {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+        }
+
+        .player-title {
+            font-size: 1.5em;
+            color: #667eea;
+            margin-bottom: 15px;
+            font-weight: bold;
+        }
+
+        .video-container {
+            position: relative;
+            width: 100%;
+            padding-bottom: 56.25%;
+            background: #000;
+            border-radius: 10px;
+            overflow: hidden;
+            margin-bottom: 20px;
+        }
+
+        video {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+
+        .input-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #333;
+            font-weight: 600;
+        }
+
+        input[type="text"] {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+
+        input[type="text"]:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .status {
+            margin-top: 10px;
+            padding: 10px;
+            border-radius: 5px;
+            font-size: 0.9em;
+            text-align: center;
+        }
+
+        .status.ready {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 1em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin-top: 10px;
+            width: 100%;
+        }
+
+        .btn-reload {
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-reload:hover {
+            background: #5568d3;
+            transform: translateY(-2px);
+        }
+
+        .global-controls {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            margin-bottom: 30px;
+            flex-wrap: wrap;
+        }
+
+        .global-controls .btn {
+            width: auto;
+            margin: 0;
+            padding: 15px 30px;
+        }
+
+        .btn-play {
+            background: #28a745;
+            color: white;
+        }
+
+        .btn-play:hover {
+            background: #218838;
+        }
+
+        .btn-pause {
+            background: #ffc107;
+            color: #333;
+        }
+
+        .btn-pause:hover {
+            background: #e0a800;
+        }
+
+        .btn-stop {
+            background: #dc3545;
+            color: white;
+        }
+
+        .btn-stop:hover {
+            background: #c82333;
+        }
+
+        .btn-reload-all {
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-reload-all:hover {
+            background: #5568d3;
+        }
+
+        .time-display {
+            text-align: center;
+            font-size: 2em;
+            font-weight: bold;
+            color: white;
+            background: rgba(0, 0, 0, 0.3);
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 30px;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+        }
+
+        .info-panel {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 10px;
+            margin-top: 15px;
+            font-size: 0.9em;
+        }
+
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 5px 0;
+            border-bottom: 1px solid #e0e0e0;
+        }
+
+        .info-row:last-child {
+            border-bottom: none;
+        }
+
+        .info-label {
+            font-weight: 600;
+            color: #555;
+        }
+
+        .info-value {
+            color: #667eea;
+            font-weight: bold;
+        }
+
+        .config-panel {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 10px;
+            margin-top: 15px;
+        }
+
+        .config-panel label {
+            margin-bottom: 10px;
+        }
+
+        .config-textarea {
+            width: 100%;
+            min-height: 150px;
+            padding: 10px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            resize: vertical;
+            background: #fff;
+        }
+
+        .config-textarea:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .config-actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        .btn-apply {
+            background: #28a745;
+            color: white;
+            flex: 1;
+        }
+
+        .btn-apply:hover {
+            background: #218838;
+        }
+
+        .btn-reset {
+            background: #6c757d;
+            color: white;
+            flex: 1;
+        }
+
+        .btn-reset:hover {
+            background: #5a6268;
+        }
+
+        .pause-indicator {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 30px 50px;
+            border-radius: 15px;
+            font-size: 3em;
+            font-weight: bold;
+            z-index: 1000;
+            display: none;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+        }
+
+        .pause-indicator.show {
+            display: block;
+        }
+
+        .info-section {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+            margin-top: 20px;
+        }
+
+        .info-section h2 {
+            font-size: 1.5em;
+            color: #667eea;
+            margin-bottom: 20px;
+            font-weight: bold;
+        }
+
+        .info-section h3 {
+            font-size: 1.2em;
+            color: #555;
+            margin-top: 20px;
+            margin-bottom: 10px;
+            font-weight: 600;
+        }
+
+        .info-section p,
+        .info-section ol,
+        .info-section ul {
+            color: #333;
+            line-height: 1.8;
+            margin-bottom: 15px;
+        }
+
+        .info-section ol {
+            padding-left: 25px;
+        }
+
+        .info-section li {
+            margin-bottom: 10px;
+        }
+
+        .info-section code {
+            background: #f8f9fa;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+            color: #667eea;
+            font-size: 0.9em;
+        }
+
+        .info-section .formula {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 15px 0;
+            font-family: 'Courier New', monospace;
+            border-left: 4px solid #667eea;
+        }
+
+        .info-section .note {
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 15px 0;
+        }
+
+        .info-section .note strong {
+            color: #856404;
+        }
+
+        @media (max-width: 1400px) {
+            .players-container.count-3 {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @media (max-width: 968px) {
+            .players-container.count-2 {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="pause-indicator" id="pauseIndicator">⏸️ PAUSE</div>
+
+    <div class="container">
+        <h1>🎬 1-2-3 HLS Players <span style="font-size: 0.5em; opacity: 0.8;">v3.0</span></h1>
+
+        <div style="text-align: center; color: white; margin-bottom: 20px; font-size: 1.1em;">
+            <span style="background: rgba(0,0,0,0.3); padding: 8px 15px; border-radius: 5px;">
+                📦 HLS.js version <span id="hlsVersion"></span> | ⌨️ Press SPACE to pause/play
+            </span>
+        </div>
+
+        <div class="player-count-controls">
+            <button id="count1" class="active">1 Player</button>
+            <button id="count2">2 Players</button>
+            <button id="count3">3 Players</button>
+        </div>
+
+        <div class="global-controls">
+            <button class="btn btn-play" id="playAll">▶️ Start All</button>
+            <button class="btn btn-pause" id="pauseAll">⏸️ Pause All</button>
+            <button class="btn btn-stop" id="stopAll">⏹️ Stop All</button>
+            <button class="btn btn-reload-all" id="reloadAll">🔄 Reload All</button>
+        </div>
+
+        <div class="time-display" id="currentTime"></div>
+
+        <div class="players-container count-1" id="playersContainer">
+            <!-- Players will be dynamically inserted here -->
+        </div>
+
+        <div class="info-section">
+            <h2>📖 Latency Metrics Definitions (v3.0)</h2>
+
+            <h3>1. Playlist Latency</h3>
+            <p>The buffer depth - how far behind the live edge (last available fragment) the player is currently
+                operating.</p>
+            <div class="formula">Playlist Latency = Last Fragment Start Time - Current Fragment Start Time</div>
+            <p>This indicates the amount of buffered content available between the current playback position and the
+                most recent fragment in the playlist.</p>
+
+            <h3>2. Playhead vs Device Time</h3>
+            <p>Time difference between the estimated real-world time of the current playback position and the device
+                clock.</p>
+            <div class="formula">Playhead Difference = Device Time - Estimated Playhead DateTime</div>
+            <p>This shows how far in the past (relative to device time) the content being played was originally
+                broadcast.</p>
+
+            <h3>3. Playlist End vs Device Time</h3>
+            <p>Time difference between the estimated real-world time of the last fragment's end and the device clock.
+            </p>
+            <div class="formula">Playlist End Difference = Device Time - (Last Fragment PDT + Duration)</div>
+            <p>This shows how recent the latest available content is compared to the current device time.</p>
+
+            <h3>4. HLS.js Configuration Parameters</h3>
+            <p><strong>liveSyncDurationCount:</strong> Number of target duration intervals from the playlist end that
+                the player should maintain as buffer.</p>
+            <p><strong>liveSyncDuration:</strong> The actual duration in seconds that the player targets for live sync
+                position.</p>
+            <p><strong>liveMaxLatencyDurationCount:</strong> Maximum latency threshold in terms of target duration
+                count.</p>
+            <p><strong>liveMaxLatencyDuration:</strong> Maximum latency threshold in seconds.</p>
+
+            <h3>5. Player Latency Properties</h3>
+            <p><strong>targetLatency:</strong> The target latency the player is trying to maintain (read from player
+                instance).</p>
+            <p><strong>latency:</strong> The current actual latency of the player (read from player instance).</p>
+            <p><strong>maxLatency:</strong> The maximum latency threshold (read from player instance).</p>
+
+            <div class="note">
+                <strong>⚠️ Important:</strong> Time-based metrics require <code>#EXT-X-PROGRAM-DATE-TIME</code> tags in
+                the HLS manifest. Without these tags, the display will show "N/A (no PDT)".
+            </div>
+
+            <div class="note">
+                <strong>📝 Note:</strong> The "Remove" buttons allow you to test player behavior without certain
+                parameters:
+                <ul>
+                    <li><strong>Remove liveSyncDurationCount:</strong> Removes both liveSyncDurationCount and
+                        liveMaxLatencyDurationCount</li>
+                    <li><strong>Remove liveSyncDuration:</strong> Removes both liveSyncDuration and
+                        liveMaxLatencyDuration</li>
+                </ul>
+                This lets HLS.js use its default synchronization logic.
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let globalPaused = false;
+        let clockInterval = null;
+        let players = {};
+        let currentPlayerCount = 2;
+
+        function getPlayerTemplate(playerNum) {
+            return `
+            <div class="player-wrapper" id="playerWrapper${playerNum}">
+                <div class="player-title">Player ${playerNum}</div>
+                
+                <div class="video-container">
+                    <video id="video${playerNum}" controls muted></video>
+                </div>
+                
+                <button class="btn btn-reload" id="reload${playerNum}">🔄 Reload Stream</button>
+
+                <div class="input-group">
+                    <label for="url${playerNum}">HLS Stream URL:</label>
+                    <input type="text" id="url${playerNum}" value="https://stream.mux.com/v69RSHhFelSm4701snP22dYz2jICy4E4FUyk02rW4gxRM.m3u8" placeholder="https://example.com/stream.m3u8">
+                </div>
+
+                <div class="info-panel">
+                    <div class="info-row">
+                        <span class="info-label">Chunk Duration:</span>
+                        <span class="info-value" id="chunkDuration${playerNum}">-</span>
+                    </div>
+
+                    <div class="info-row">
+                        <span class="info-label">liveSyncDurationCount:</span>
+                        <span class="info-value" id="syncCount${playerNum}">-</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">liveSyncDuration:</span>
+                        <span class="info-value" id="syncDuration${playerNum}">-</span>
+                    </div>
+                    
+                    <div class="info-row">
+                        <span class="info-label">Playlist Latency:</span>
+                        <span class="info-value" id="playlistLatency${playerNum}">-</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">targetLatency:</span>
+                        <span class="info-value" id="targetLatency${playerNum}">-</span>
+                    </div>
+
+                    <div class="info-row">
+                        <span class="info-label">latency:</span>
+                        <span class="info-value" id="latency${playerNum}">-</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">maxLatency:</span>
+                        <span class="info-value" id="maxLatency${playerNum}">-</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Playhead vs Device Time:</span>
+                        <span class="info-value" id="playheadDiff${playerNum}">-</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Playlist End vs Device Time:</span>
+                        <span class="info-value" id="playlistEndDiff${playerNum}">-</span>
+                    </div>
+                    <div>
+                        you can access the player instance via <code>players[${playerNum}].hls</code>
+                    </div>
+                </div>
+
+                <div class="config-panel">
+                    <label>Custom Configuration (JSON):</label>
+                    <textarea class="config-textarea" id="config${playerNum}" placeholder='{\n  "debug": true,\n  "enableWorker": true,\n  "lowLatencyMode": true,\n  "backBufferLength": 90\n}'></textarea>
+                    <div class="config-actions">
+                        <button class="btn btn-apply" id="applyConfig${playerNum}">Apply</button>
+                        <button class="btn btn-reset" id="resetConfig${playerNum}">Reset</button>
+                    </div>
+                    <div class="config-actions" style="margin-top: 10px;">
+                        <button class="btn btn-reset" id="removeSyncDuration${playerNum}">Remove liveSyncDuration</button>
+                        <button class="btn btn-reset" id="removeSyncCount${playerNum}">Remove liveSyncDurationCount</button>
+                    </div>
+                </div>
+
+                <div id="status${playerNum}" class="status"></div>
+            </div>
+            `;
+        }
+
+        class HLSPlayer {
+            constructor(playerNum) {
+                this.playerNum = playerNum;
+                this.video = document.getElementById(`video${playerNum}`);
+                this.urlInput = document.getElementById(`url${playerNum}`);
+                this.statusDisplay = document.getElementById(`status${playerNum}`);
+                this.reloadBtn = document.getElementById(`reload${playerNum}`);
+                this.configTextarea = document.getElementById(`config${playerNum}`);
+                this.applyConfigBtn = document.getElementById(`applyConfig${playerNum}`);
+                this.resetConfigBtn = document.getElementById(`resetConfig${playerNum}`);
+                this.removeSyncDurationBtn = document.getElementById(`removeSyncDuration${playerNum}`);
+                this.removeSyncCountBtn = document.getElementById(`removeSyncCount${playerNum}`);
+
+                this.playlistLatencyDisplay = document.getElementById(`playlistLatency${playerNum}`);
+                this.playheadDiffDisplay = document.getElementById(`playheadDiff${playerNum}`);
+                this.playlistEndDiffDisplay = document.getElementById(`playlistEndDiff${playerNum}`);
+                this.chunkDurationDisplay = document.getElementById(`chunkDuration${playerNum}`);
+                this.syncCountDisplay = document.getElementById(`syncCount${playerNum}`);
+                this.syncDurationDisplay = document.getElementById(`syncDuration${playerNum}`);
+                this.targetLatencyDisplay = document.getElementById(`targetLatency${playerNum}`);
+                this.latencyDisplay = document.getElementById(`latency${playerNum}`);
+                this.maxLatencyDisplay = document.getElementById(`maxLatency${playerNum}`);
+
+                this.hls = null;
+                this.updateInterval = null;
+                this.defaultSyncCount = 3;
+                this.customConfig = {};
+
+                this.init();
+            }
+
+            init() {
+                this.resetConfig();
+
+                this.urlInput.addEventListener('change', () => {
+                    this.loadStream();
+                });
+
+                this.urlInput.addEventListener('paste', () => {
+                    setTimeout(() => this.loadStream(), 100);
+                });
+
+                this.reloadBtn.addEventListener('click', () => {
+                    this.loadStream();
+                });
+
+                this.applyConfigBtn.addEventListener('click', () => {
+                    this.applyConfig();
+                });
+
+                this.resetConfigBtn.addEventListener('click', () => {
+                    this.resetConfig();
+                });
+
+                this.removeSyncDurationBtn.addEventListener('click', () => {
+                    this.removeConfigParams(['liveSyncDuration', 'liveMaxLatencyDuration']);
+                });
+
+                this.removeSyncCountBtn.addEventListener('click', () => {
+                    this.removeConfigParams(['liveSyncDurationCount', 'liveMaxLatencyDurationCount']);
+                });
+
+                // Auto-load stream
+                setTimeout(() => {
+                    this.loadStream();
+                }, 500);
+            }
+
+            resetConfig() {
+                const defaultConfig = {
+                    "debug": false,
+                    "enableWorker": true,
+                    "lowLatencyMode": true,
+                    "backBufferLength": 90
+                };
+                this.customConfig = defaultConfig;
+                this.configTextarea.value = JSON.stringify(defaultConfig, null, 2);
+                this.loadStream();
+            }
+
+            applyConfig() {
+                try {
+                    this.customConfig = JSON.parse(this.configTextarea.value);
+                    this.updateStatus('Configuration applied', 'ready');
+                    this.loadStream();
+                } catch (e) {
+                    this.updateStatus('JSON Error: ' + e.message, 'error');
+                }
+            }
+
+            removeConfigParams(paramNames) {
+                try {
+                    const config = JSON.parse(this.configTextarea.value);
+                    console.log('Before removal:', this.hls.config);
+                    paramNames.forEach(param => delete config[param]);
+                    paramNames.forEach(param => delete this.hls.config[param]);
+                    this.customConfig = config;
+                    this.configTextarea.value = JSON.stringify(config, null, 2);
+                    this.updateStatus(`Removed ${paramNames.join(', ')}`, 'ready');
+                    this.loadStream();
+                } catch (e) {
+                    this.updateStatus('JSON Error: ' + e.message, 'error');
+                }
+            }
+
+            play() {
+                if (this.video) {
+                    this.video.play();
+                }
+            }
+
+            pause() {
+                if (this.video) {
+                    this.video.pause();
+                }
+            }
+
+            stop() {
+                if (this.video) {
+                    this.video.pause();
+                    this.video.currentTime = 0;
+                }
+            }
+
+            loadStream() {
+                const url = this.urlInput.value.trim();
+                if (!url) {
+                    return;
+                }
+
+                if (this.hls) {
+                    this.hls.destroy();
+                }
+
+                if (Hls.isSupported()) {
+                    const customUserConfig = this.customConfig;
+                    const finalConfig = Object.assign({}, customUserConfig, {
+                        xhrSetup: function (xhr, url) {
+                            xhr.setRequestHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+                            xhr.setRequestHeader('Pragma', 'no-cache');
+                            xhr.setRequestHeader('Expires', '0');
+                        }
+                    });
+
+                    this.hls = new Hls(finalConfig); 
+
+                    this.hls.loadSource(url);
+                    this.hls.attachMedia(this.video);
+
+                    this.hls.on(Hls.Events.MANIFEST_PARSED, () => {
+                        this.updateStatus('Stream loaded successfully', 'ready');
+                        this.updateInfo();
+                        this.startInfoUpdate();
+                        this.video.play();
+                    });
+
+                    this.hls.on(Hls.Events.ERROR, (event, data) => {
+                        if (data.fatal) {
+                            this.updateStatus(`Error: ${data.type}`, 'error');
+                            this.stopInfoUpdate();
+                        }
+                    });
+
+                    this.hls.on(Hls.Events.FRAG_CHANGED, () => {
+                        this.updateInfo();
+                    });
+                } else if (this.video.canPlayType('application/vnd.apple.mpegurl')) {
+                    this.video.src = url;
+                    this.video.play();
+                    this.updateStatus('Stream loaded (native)', 'ready');
+                } else {
+                    this.updateStatus('HLS not supported', 'error');
+                }
+            }
+
+            updateInfo() {
+                if (!this.hls) return;
+                // Display liveSyncDurationCount
+                const syncCount = this.hls.config.liveSyncDurationCount;
+                this.syncCountDisplay.textContent = syncCount !== undefined ? syncCount : 'N/A';
+
+                // Display liveSyncDuration
+                const syncDuration = this.hls.config.liveSyncDuration;
+                this.syncDurationDisplay.textContent = syncDuration !== undefined ? `${syncDuration.toFixed(3)}s` : 'N/A';
+
+                // Display player latency properties
+                if (this.hls.targetLatency !== undefined) {
+                    this.targetLatencyDisplay.textContent = `${this.hls.targetLatency}s`;
+                } else {
+                    this.targetLatencyDisplay.textContent = 'N/A';
+                }
+
+                if (this.hls.latency !== undefined) {
+                    this.latencyDisplay.textContent = `${this.hls.latency.toFixed(3)}s`;
+                } else {
+                    this.latencyDisplay.textContent = 'N/A';
+                }
+
+                if (this.hls.maxLatency !== undefined) {
+                    this.maxLatencyDisplay.textContent = `${this.hls.maxLatency.toFixed(3)}s`;
+                } else {
+                    this.maxLatencyDisplay.textContent = 'N/A';
+                }
+
+                const level = this.hls.levels[this.hls.currentLevel];
+                if (level && level.details) {
+                    const fragments = level.details.fragments;
+                    if (fragments.length > 0) {
+                        const currentTime = this.video.currentTime;
+                        const currentDateTime = Date.now();
+                        let currentFrag = null;
+
+                        // Find the fragment currently being played
+                        for (let i = fragments.length - 1; i >= 0; i--) {
+                            if (fragments[i].start <= currentTime) {
+                                currentFrag = fragments[i];
+                                break;
+                            }
+                        }
+
+                        if (currentFrag) {
+                            const chunkDuration = currentFrag.duration;
+                            this.chunkDurationDisplay.textContent = `${chunkDuration.toFixed(3)}s`;
+
+                            const lastFrag = fragments[fragments.length - 1];
+
+                            // Calculate playlist latency (buffer depth)
+                            if (lastFrag) {
+                                const playlistLatencySeconds = lastFrag.start - currentFrag.start;
+                                const playlistLatencyMs = Math.round(playlistLatencySeconds * 1000);
+                                this.playlistLatencyDisplay.textContent = `${playlistLatencySeconds.toFixed(2)}s (${playlistLatencyMs}ms)`;
+                            }
+
+                            // Calculate time differences with programDateTime
+                            if (currentFrag.programDateTime) {
+                                const fragmentDateTime = currentFrag.programDateTime;
+                                const timeSinceFragmentStart = currentTime - currentFrag.start;
+
+                                // Current playback point datetime
+                                const currentPlaybackDateTime = fragmentDateTime + (timeSinceFragmentStart * 1000);
+
+                                // Playhead vs Device Time
+                                const playheadDiffMs = currentDateTime - currentPlaybackDateTime;
+                                const playheadDiffSec = playheadDiffMs / 1000;
+                                this.playheadDiffDisplay.textContent = `${playheadDiffSec.toFixed(2)}s (${Math.round(playheadDiffMs)}ms)`;
+
+                                // Playlist End vs Device Time
+                                if (lastFrag && lastFrag.programDateTime) {
+                                    const playlistEndDateTime = lastFrag.programDateTime + (lastFrag.duration * 1000);
+                                    const playlistEndDiffMs = currentDateTime - playlistEndDateTime;
+                                    const playlistEndDiffSec = playlistEndDiffMs / 1000;
+                                    this.playlistEndDiffDisplay.textContent = `${playlistEndDiffSec.toFixed(2)}s (${Math.round(playlistEndDiffMs)}ms)`;
+                                } else {
+                                    this.playlistEndDiffDisplay.textContent = 'N/A';
+                                }
+                            } else {
+                                this.playheadDiffDisplay.textContent = 'N/A (no PDT)';
+                                this.playlistEndDiffDisplay.textContent = 'N/A (no PDT)';
+                            }
+                        }
+                    }
+                }
+            }
+
+            startInfoUpdate() {
+                this.stopInfoUpdate();
+                this.updateInterval = setInterval(() => {
+                    if (!globalPaused) {
+                        this.updateInfo();
+                    }
+                }, 500);
+            }
+
+            stopInfoUpdate() {
+                if (this.updateInterval) {
+                    clearInterval(this.updateInterval);
+                    this.updateInterval = null;
+                }
+            }
+
+            updateStatus(message, type) {
+                this.statusDisplay.textContent = message;
+                this.statusDisplay.className = `status ${type}`;
+            }
+
+            destroy() {
+                this.stopInfoUpdate();
+                if (this.hls) {
+                    this.hls.destroy();
+                    this.hls = null;
+                }
+            }
+        }
+
+        // Display HLS.js version
+        document.getElementById('hlsVersion').textContent = Hls.version;
+
+        // Real-time clock
+        function updateClock() {
+            if (globalPaused) return;
+
+            const now = new Date();
+            const timeString = now.toLocaleTimeString('en-US', {
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+                hour12: false
+            });
+            const dateString = now.toLocaleDateString('en-US', {
+                weekday: 'long',
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric'
+            });
+            document.getElementById('currentTime').textContent = `${dateString} - ${timeString}`;
+        }
+
+        function startClock() {
+            updateClock();
+            clockInterval = setInterval(updateClock, 1000);
+        }
+
+        function stopClock() {
+            if (clockInterval) {
+                clearInterval(clockInterval);
+                clockInterval = null;
+            }
+        }
+
+        startClock();
+
+        // Function to set player count
+        function setPlayerCount(count) {
+            currentPlayerCount = count;
+            const container = document.getElementById('playersContainer');
+
+            // Update button states
+            document.getElementById('count1').classList.toggle('active', count === 1);
+            document.getElementById('count2').classList.toggle('active', count === 2);
+            document.getElementById('count3').classList.toggle('active', count === 3);
+
+            // Update container class
+            container.className = `players-container count-${count}`;
+
+            // Destroy existing players
+            Object.values(players).forEach(player => player.destroy());
+            players = {};
+
+            // Clear container
+            container.innerHTML = '';
+
+            // Create new players
+            for (let i = 1; i <= count; i++) {
+                container.innerHTML += getPlayerTemplate(i);
+            }
+
+            // Initialize players
+            for (let i = 1; i <= count; i++) {
+                players[i] = new HLSPlayer(i);
+            }
+        }
+
+        // Player count control buttons
+        document.getElementById('count1').addEventListener('click', () => setPlayerCount(1));
+        document.getElementById('count2').addEventListener('click', () => setPlayerCount(2));
+        document.getElementById('count3').addEventListener('click', () => setPlayerCount(3));
+
+        // Global controls
+        document.getElementById('playAll').addEventListener('click', () => {
+            Object.values(players).forEach(player => player.play());
+        });
+
+        document.getElementById('pauseAll').addEventListener('click', () => {
+            Object.values(players).forEach(player => player.pause());
+        });
+
+        document.getElementById('stopAll').addEventListener('click', () => {
+            Object.values(players).forEach(player => player.stop());
+        });
+
+        document.getElementById('reloadAll').addEventListener('click', () => {
+            Object.values(players).forEach(player => player.loadStream());
+        });
+
+        // Handle SPACE key for global pause/play
+        document.addEventListener('keydown', (e) => {
+            if (e.code === 'Space' && e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA') {
+                e.preventDefault();
+
+                if (globalPaused) {
+                    // Resume playback
+                    globalPaused = false;
+                    Object.values(players).forEach(player => player.play());
+                    startClock();
+                    document.getElementById('pauseIndicator').classList.remove('show');
+                } else {
+                    // Pause
+                    globalPaused = true;
+                    Object.values(players).forEach(player => player.pause());
+                    stopClock();
+                    document.getElementById('pauseIndicator').classList.add('show');
+                }
+            }
+        });
+
+        // Initialize with 2 players by default
+        setPlayerCount(2);
+    </script>
+</body>
+
+</html>
