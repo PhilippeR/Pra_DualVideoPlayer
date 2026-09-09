@@ -197,8 +197,55 @@
         }
 
         .hud.hidden,
-        .tag.hidden {
+        .tag.hidden,
+        .metrics.hidden {
             display: none;
+        }
+
+        /* ---------- quality-metrics overlay ---------- */
+        .metrics {
+            position: absolute;
+            z-index: 6;
+            top: 48px;
+            min-width: 210px;
+            font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+            font-variant-numeric: tabular-nums;
+            font-size: 15px;
+            line-height: 1.7;
+            background: rgba(11, 14, 20, .62);
+            border: 1px solid var(--line);
+            border-radius: 10px;
+            padding: 10px 14px;
+            backdrop-filter: blur(6px);
+        }
+
+        #metricsA {
+            left: 10px;
+        }
+
+        #metricsB {
+            right: 10px;
+        }
+
+        .metrics .mrow {
+            display: flex;
+            justify-content: space-between;
+            gap: 22px;
+        }
+
+        .metrics .mhead {
+            color: var(--muted);
+            border-bottom: 1px solid var(--line);
+            margin-bottom: 5px;
+            padding-bottom: 4px;
+        }
+
+        .metrics .mk {
+            color: var(--muted);
+        }
+
+        .metrics .mv {
+            font-weight: 600;
         }
 
         .drophint {
@@ -470,6 +517,8 @@
             <div class="hud" id="hudA">A 00:00:00:00</div>
             <div class="hud" id="hudB">B 00:00:00:00</div>
             <div class="hud" id="hudDiff">&Delta; 0.000 s</div>
+            <div class="metrics hidden" id="metricsA"></div>
+            <div class="metrics hidden" id="metricsB"></div>
             <div class="drophint" id="drophint">Drop 1 or 2 video files&hellip;</div>
         </div>
 
@@ -582,14 +631,26 @@
                     <input type="text" id="urlA" placeholder="or paste a URL for A">
                 </div>
                 <div class="src-line">
+                    <span class="pill a" style="visibility:hidden">A</span>
+                    <label class="time" for="csvA">quality metrics CSV (optional)</label>
+                    <input type="file" id="csvA" accept=".csv,text/csv">
+                </div>
+                <div class="src-line">
                     <span class="pill b">B</span>
                     <input type="file" id="fileB" accept="video/*">
                     <input type="text" id="urlB" placeholder="or paste a URL for B">
                 </div>
                 <div class="src-line">
+                    <span class="pill b" style="visibility:hidden">B</span>
+                    <label class="time" for="csvB">quality metrics CSV (optional)</label>
+                    <input type="file" id="csvB" accept=".csv,text/csv">
+                </div>
+                <div class="src-line">
                     <button class="b primary" id="loadBtn">Load</button>
                     <button class="b" id="swapBtn">Swap A &harr; B</button>
-                    <span class="time">Tip: drag &amp; drop files straight onto the video.</span>
+                    <button class="b" id="csvClear">Clear CSV</button>
+                    <button class="b danger" id="resetBtn" title="Clear every source field and release the loaded files">Reset</button>
+                    <span class="time">Tip: drag &amp; drop video or CSV files straight onto the video.</span>
                 </div>
             </div>
 
@@ -617,6 +678,7 @@
         const seek = $("seek"), tCur = $("tCur"), tDur = $("tDur");
         const hudA = $("hudA"), hudB = $("hudB"), hudDiff = $("hudDiff");
         const tagA = $("tagA"), tagB = $("tagB");
+        const metricsElA = $("metricsA"), metricsElB = $("metricsB");
 
         let fps = 25;
         let offset = 0;          // B.currentTime target = A.currentTime + offset
@@ -626,6 +688,78 @@
         let scrubbing = false;
         let hudOn = true;
         let looping = false;
+
+        /* ---------------- quality-metrics overlay ---------------- */
+        // Columns rendered in the on-image metrics column. Each entry is matched against
+        // the CSV header: an exact column name, or a "prefix*" pattern (e.g. "vmaf_*"
+        // matches every column starting with "vmaf_"). Add entries here to surface more
+        // of the columns present in the CSV file.
+        const OVERLAY_METRICS = ["psnr_y", "psnr_cb", "psnr_cr", "vmaf_*"];
+
+        let metricsA = null;   // { header:[...], cols:[...], rows:[{col:value}, ...] } indexed by frame
+        let metricsB = null;
+
+        function selectMetricColumns(header) {
+            const out = [];
+            for (const pat of OVERLAY_METRICS) {
+                if (pat.endsWith("*")) {
+                    const pre = pat.slice(0, -1);
+                    header.forEach(h => { if (h.startsWith(pre) && !out.includes(h)) out.push(h); });
+                } else if (header.includes(pat) && !out.includes(pat)) {
+                    out.push(pat);
+                }
+            }
+            return out;
+        }
+
+        function parseMetricsCSV(text) {
+            const lines = text.split(/\r?\n/).filter(l => l.trim() !== "");
+            if (lines.length < 2) return null;
+            const header = lines[0].split(",").map(s => s.trim()).filter(s => s !== "");
+            const frameIdx = header.findIndex(h => /^frame$/i.test(h));
+            const rows = [];
+            for (let i = 1; i < lines.length; i++) {
+                const parts = lines[i].split(",");
+                const rec = {};
+                header.forEach((h, c) => { rec[h] = parseFloat(parts[c]); });
+                const fi = frameIdx >= 0 ? Math.round(parseFloat(parts[frameIdx])) : i - 1;
+                if (isFinite(fi) && fi >= 0) rows[fi] = rec;
+            }
+            return { header, cols: selectMetricColumns(header), rows };
+        }
+
+        function loadMetricsFile(file, which) {
+            if (!file) return;
+            const rd = new FileReader();
+            rd.onload = () => {
+                const parsed = parseMetricsCSV(String(rd.result));
+                if (!parsed || !parsed.cols.length) {
+                    console.warn("metrics CSV: no usable columns in", file.name);
+                }
+                if (which === "A") metricsA = parsed; else metricsB = parsed;
+                renderHUD();
+            };
+            rd.onerror = () => { console.warn("metrics CSV: could not read", file.name); };
+            rd.readAsText(file);
+        }
+
+        function renderMetricsOverlay(video, data, el) {
+            if (!hudOn || !data || !data.cols.length || !data.rows.length) {
+                el.classList.add("hidden");
+                el.innerHTML = "";
+                return;
+            }
+            const fi = clamp(Math.round(video.currentTime * fps), 0, data.rows.length - 1);
+            const rec = data.rows[fi];
+            if (!rec) { el.classList.add("hidden"); el.innerHTML = ""; return; }
+            let html = `<div class="mrow mhead"><span class="mk">frame</span><span class="mv">#${fi}</span></div>`;
+            for (const c of data.cols) {
+                const v = rec[c];
+                html += `<div class="mrow"><span class="mk">${c}</span><span class="mv">${isFinite(v) ? v.toFixed(2) : "—"}</span></div>`;
+            }
+            el.innerHTML = html;
+            el.classList.remove("hidden");
+        }
 
         /* ---------------- helpers ---------------- */
         const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
@@ -724,6 +858,8 @@
             hudA.textContent = "A " + tc(A.currentTime);
             hudB.textContent = "B " + tc(B.currentTime);
             hudDiff.textContent = "Δ " + (B.currentTime - A.currentTime).toFixed(3) + " s";
+            renderMetricsOverlay(A, metricsA, metricsElA);
+            renderMetricsOverlay(B, metricsB, metricsElB);
         }
 
         let lastResync = 0;
@@ -807,32 +943,69 @@
         };
         $("hudBtn").onclick = () => {
             hudOn = !hudOn;
-            [hudA, hudB, hudDiff, tagA, tagB].forEach(el => el.classList.toggle("hidden", !hudOn));
+            [hudA, hudB, hudDiff, tagA, tagB, metricsElA, metricsElB].forEach(el => el.classList.toggle("hidden", !hudOn));
             $("hudBtn").textContent = "HUD: " + (hudOn ? "on" : "off");
+            renderHUD();
         };
         $("fsBtn").onclick = () => {
             if (!document.fullscreenElement) stageWrap.requestFullscreen();
             else document.exitFullscreen();
         };
 
-        /* ---------------- load / swap ---------------- */
-        function setSource(v, tagEl, src, label) {
-            v.src = src;
+        /* ---------------- load / swap / reset ---------------- */
+        // blob: URL currently held by each <video>, so it can be revoked before replacement
+        let objUrlA = null, objUrlB = null;
+
+        function setSource(v, tagEl, src, label, objUrl) {
+            const held = v === A ? objUrlA : objUrlB;
+            if (held && held !== src) URL.revokeObjectURL(held);
+            if (v === A) objUrlA = objUrl || null; else objUrlB = objUrl || null;
+            v.pause();
+            if (src) v.src = src; else v.removeAttribute("src");
             tagEl.textContent = label;
             v.load();
+            renderHUD();
+        }
+        function setVideoFile(v, tagEl, file) {
+            const u = URL.createObjectURL(file);
+            setSource(v, tagEl, u, file.name, u);
         }
         $("loadBtn").onclick = () => {
             const fa = $("fileA").files[0], fb = $("fileB").files[0];
-            if (fa) setSource(A, tagA, URL.createObjectURL(fa), fa.name);
+            if (fa) setVideoFile(A, tagA, fa);
             else if ($("urlA").value) setSource(A, tagA, $("urlA").value, $("urlA").value.split("/").pop());
-            if (fb) setSource(B, tagB, URL.createObjectURL(fb), fb.name);
+            if (fb) setVideoFile(B, tagB, fb);
             else if ($("urlB").value) setSource(B, tagB, $("urlB").value, $("urlB").value.split("/").pop());
         };
         $("swapBtn").onclick = () => {
             const sa = A.src, sb = B.src, ta = tagA.textContent, tb = tagB.textContent, t = A.currentTime;
             A.src = sb; B.src = sa;
+            [objUrlA, objUrlB] = [objUrlB, objUrlA];
             tagA.textContent = tb; tagB.textContent = ta;
+            [metricsA, metricsB] = [metricsB, metricsA];
+            renderHUD();
             A.addEventListener("loadeddata", function h() { seekTo(t); A.removeEventListener("loadeddata", h); });
+        };
+        $("resetBtn").onclick = () => {
+            pauseBoth();
+            [objUrlA, objUrlB].forEach(u => { if (u) URL.revokeObjectURL(u); });
+            objUrlA = objUrlB = null;
+            ["fileA", "urlA", "csvA", "fileB", "urlB", "csvB"].forEach(id => { $(id).value = ""; });
+            A.removeAttribute("src"); B.removeAttribute("src");
+            A.load(); B.load();
+            tagA.textContent = "A"; tagB.textContent = "B";
+            metricsA = metricsB = null;
+            seek.value = 0;
+            renderHUD();
+        };
+
+        /* optional per-frame quality-metrics CSV, one per video */
+        $("csvA").addEventListener("change", e => loadMetricsFile(e.target.files[0], "A"));
+        $("csvB").addEventListener("change", e => loadMetricsFile(e.target.files[0], "B"));
+        $("csvClear").onclick = () => {
+            metricsA = metricsB = null;
+            $("csvA").value = ""; $("csvB").value = "";
+            renderHUD();
         };
 
         A.addEventListener("loadedmetadata", () => { renderHUD(); });
@@ -849,16 +1022,24 @@
             dh.classList.remove("show");
         }));
         stageWrap.addEventListener("drop", e => {
-            const files = [...e.dataTransfer.files].filter(f => f.type.startsWith("video/"));
+            const dropped = [...e.dataTransfer.files];
+            const rect = stageWrap.getBoundingClientRect();
+            const csvs = dropped.filter(f => /\.csv$/i.test(f.name) || f.type === "text/csv");
+            if (csvs.length >= 2) {
+                loadMetricsFile(csvs[0], "A");
+                loadMetricsFile(csvs[1], "B");
+            } else if (csvs.length === 1) {
+                loadMetricsFile(csvs[0], (e.clientX - rect.left) < rect.width / 2 ? "A" : "B");
+            }
+            const files = dropped.filter(f => f.type.startsWith("video/"));
             if (!files.length) return;
             if (files.length >= 2) {
-                setSource(A, tagA, URL.createObjectURL(files[0]), files[0].name);
-                setSource(B, tagB, URL.createObjectURL(files[1]), files[1].name);
+                setVideoFile(A, tagA, files[0]);
+                setVideoFile(B, tagB, files[1]);
             } else {
-                const rect = stageWrap.getBoundingClientRect();
                 const left = (e.clientX - rect.left) < rect.width / 2;
-                if (left) setSource(A, tagA, URL.createObjectURL(files[0]), files[0].name);
-                else setSource(B, tagB, URL.createObjectURL(files[0]), files[0].name);
+                if (left) setVideoFile(A, tagA, files[0]);
+                else setVideoFile(B, tagB, files[0]);
             }
         });
 
