@@ -30,6 +30,16 @@ An "as simple as possible" dual player to quickly compare two videos (typically 
 - Adjustable wipe position
 - Zoom and pan into both videos at once
 - On-screen HUD with timing information
+- Optional **per-frame quality-metrics overlay** (PSNR / VMAF) driven by a CSV file per side
+- **Reset** button to clear every source field and release the loaded files; drag & drop of video *or* CSV files onto the stage
+
+**Quality-metrics overlay**
+
+Each side can optionally load a CSV of per-frame video-quality metrics (one row per frame, a `Frame` column plus one column per metric — the format produced by `ffmpeg`/`libvmaf`, e.g. `psnr_y`, `psnr_cb`, `psnr_cr`, `vmaf_*`, `cambi`, `integer_vif_*`, …).
+
+- During playback the values for the current frame are drawn as a column overlaid on the image (side A on the left, side B on the right), following the same show/hide rules as the HUD (`M` key / **HUD** button).
+- By default the overlay shows `psnr_y`, `psnr_cb`, `psnr_cr` and every `vmaf_*` column. The list lives in the `OVERLAY_METRICS` array near the top of the script — add exact column names or `prefix*` patterns to surface any other column present in the CSV.
+- **Clear CSV** removes the metric files without touching the videos; **Reset** clears everything.
 
 **Keyboard shortcuts**
 
